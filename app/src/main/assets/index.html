@@ -196,6 +196,16 @@
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     overflow-x: auto;
+    transition: max-height .25s ease, padding .25s ease, border-color .25s ease;
+    max-height: 60px;
+  }
+
+  #topbar.hidden {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-color: transparent;
+    overflow: hidden;
   }
 
   #topbar button {
@@ -320,7 +330,8 @@
 
   #chapter-title {
     font-size: 30px;
-    color: var(--accent);
+    font-weight: bold;
+    color: var(--read-text, inherit);
     margin: 0 0 4px 0;
   }
 
@@ -547,19 +558,7 @@
     </div>
 
     <div id="reader-scroll">
-      <div id="welcome">
-        <h2>Welcome</h2>
-        <p>This reader displays .txt chapter files from /storage/emulated/0/Novel/Chapters.</p>
-        <div class="steps">
-          <strong>How to use:</strong><br>
-          1. Create a folder at <code>Novel/Chapters</code> in your phone's internal storage (visible in any file manager as <code>Internal storage &gt; Novel &gt; Chapters</code>).<br>
-          2. Put your novel chapters as .txt files in that folder.<br>
-          3. Tap <em>"Grant storage access"</em> once and allow "All files access" for this app.<br>
-          4. Chapters appear on the left, sorted naturally, with search/filter.<br>
-          5. Tap a chapter to read it, and use Prev / Next to move between chapters.<br>
-          6. The app automatically re-reads that folder every time you open it — no need to pick it again.
-        </div>
-      </div>
+      <div id="welcome"></div>
       <div id="reader" style="display:none;">
         <h2 id="chapter-title"></h2>
         <div id="chapter-source"></div>

@@ -13,6 +13,9 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -61,6 +64,30 @@ class MainActivity : ComponentActivity() {
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
         webView.loadUrl("file:///android_asset/index.html")
+
+        setupImmersiveMode()
+    }
+
+    /**
+     * Hides the system navigation bar (the bottom back/home/recents bar)
+     * so it doesn't sit over the reader UI. The status bar (clock/battery)
+     * stays visible. A swipe from the bottom edge temporarily reveals the
+     * nav bar again (standard Android "immersive sticky" behavior), and it
+     * auto-hides once more shortly after.
+     */
+    private fun setupImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val controller = WindowInsetsControllerCompat(window, webView)
+        controller.hide(WindowInsetsCompat.Type.navigationBars())
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            setupImmersiveMode()
+        }
     }
 
     override fun onResume() {

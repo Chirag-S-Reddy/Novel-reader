@@ -159,6 +159,7 @@
     emptyNote.style.display = 'none';
 
     chaptersFolderStatus.textContent = 'Reading from: /storage/emulated/0/' + folderName;
+    openChaptersBtn.style.display = 'none';
 
     if (chapters.length === 0) {
       alert("All chapters in this folder were removed from the reader list. Add files or clear app storage to reset.");
@@ -184,6 +185,7 @@
     if (message) {
       chaptersFolderStatus.textContent = message;
     }
+    openChaptersBtn.style.display = '';
   };
 
   function pickChaptersFolder() {
@@ -292,6 +294,7 @@
     renderChapterList(searchInput.value);
     updateNavButtons();
     document.getElementById('reader-scroll').scrollTop = 0;
+    document.getElementById('topbar').classList.remove('hidden');
 
     if (isMobileViewport()) {
       sidebar.classList.add('collapsed');
@@ -413,6 +416,29 @@
 
     applyReadingColors(prefs.readBg || DEFAULT_BG, prefs.readText || DEFAULT_TEXT);
   })();
+
+  /* ---- Auto-hide top bar on scroll down, reveal on scroll up ---- */
+
+  const topbarEl = document.getElementById('topbar');
+  const readerScrollEl = document.getElementById('reader-scroll');
+  let lastScrollTop = 0;
+  const SCROLL_HIDE_THRESHOLD = 8; // ignore tiny/jittery scroll movements
+
+  readerScrollEl.addEventListener('scroll', () => {
+    const currentScrollTop = readerScrollEl.scrollTop;
+    const delta = currentScrollTop - lastScrollTop;
+
+    if (currentScrollTop <= 0) {
+      // Always show the bar once back at the very top.
+      topbarEl.classList.remove('hidden');
+    } else if (delta > SCROLL_HIDE_THRESHOLD) {
+      topbarEl.classList.add('hidden');
+      lastScrollTop = currentScrollTop;
+    } else if (delta < -SCROLL_HIDE_THRESHOLD) {
+      topbarEl.classList.remove('hidden');
+      lastScrollTop = currentScrollTop;
+    }
+  }, { passive: true });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight') openChapter(currentIndex + 1);
