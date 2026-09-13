@@ -217,81 +217,10 @@
       label.textContent = ch.title;
       label.addEventListener('click', () => openChapter(i));
 
-      const delBtn = document.createElement('button');
-      delBtn.className = 'chapter-delete-btn';
-      delBtn.textContent = '🗑';
-      delBtn.title = 'Permanently delete this chapter file';
-      delBtn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        deleteChapter(i);
-      });
-
       li.appendChild(label);
-      li.appendChild(delBtn);
       if (i === currentIndex) li.classList.add('active');
       chapterListEl.appendChild(li);
     });
-  }
-
-  function deleteChapter(index) {
-    const ch = chapters[index];
-    if (!ch) return;
-    if (!confirm(`Permanently delete "${ch.title}"?\n\nThis will delete the actual .txt file from your device. This cannot be undone.`)) {
-      return;
-    }
-
-    pendingDeleteIndex = index;
-
-    if (window.AndroidBridge && window.AndroidBridge.deleteChapterFile) {
-      window.AndroidBridge.deleteChapterFile(ch.filename);
-    } else {
-      // Fallback (e.g. testing in a plain browser tab): just remove from
-      // the in-app list since there's no real file to delete.
-      finishChapterRemoval(index);
-    }
-  }
-
-  let pendingDeleteIndex = -1;
-
-  window.onChapterFileDeleted = function (filename, success) {
-    if (!success) {
-      alert('Could not delete that file. It may already be gone, or the app may have lost storage permission.');
-      pendingDeleteIndex = -1;
-      return;
-    }
-    if (pendingDeleteIndex === -1) return;
-    finishChapterRemoval(pendingDeleteIndex);
-    pendingDeleteIndex = -1;
-  };
-
-  function finishChapterRemoval(index) {
-    const ch = chapters[index];
-    if (!ch) return;
-
-    const deleted = getDeletedSet();
-    deleted.add(ch.filename);
-    saveDeletedSet(deleted);
-
-    const wasCurrent = index === currentIndex;
-    chapters.splice(index, 1);
-
-    if (chapters.length === 0) {
-      currentIndex = -1;
-      chapterListEl.innerHTML = '';
-      welcomeEl.style.display = 'block';
-      readerEl.style.display = 'none';
-      localStorage.removeItem(lastChapterStorageKey());
-      return;
-    }
-
-    if (wasCurrent) {
-      const nextIndex = Math.min(index, chapters.length - 1);
-      openChapter(nextIndex);
-    } else {
-      if (index < currentIndex) currentIndex--;
-      renderChapterList(searchInput.value);
-      updateNavButtons();
-    }
   }
 
   function openChapter(index) {
@@ -341,9 +270,6 @@
   nextBtn.addEventListener('click', () => openChapter(currentIndex + 1));
   bottomPrev.addEventListener('click', () => openChapter(currentIndex - 1));
   bottomNext.addEventListener('click', () => openChapter(currentIndex + 1));
-  document.getElementById('bottom-delete').addEventListener('click', () => {
-    if (currentIndex !== -1) deleteChapter(currentIndex);
-  });
 
   searchInput.addEventListener('input', () => renderChapterList(searchInput.value));
 

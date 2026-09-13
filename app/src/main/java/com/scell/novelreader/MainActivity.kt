@@ -29,6 +29,30 @@ class MainActivity : ComponentActivity() {
     // Hardcoded chapters directory, as requested.
     private val chaptersDir = File("/storage/emulated/0/Novel/Chapters")
 
+    /**
+     * Writes any uncaught crash to a plain text file that can be opened
+     * with any file manager (no logcat/adb needed) — useful for
+     * diagnosing crashes on locked-down OEM Android builds (e.g. MIUI)
+     * that restrict logcat access for non-debuggable apps.
+     */
+    private fun installCrashLogger() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val crashFile = File("/storage/emulated/0/Novel/Chapters/crash_log.txt")
+                crashFile.parentFile?.mkdirs()
+                crashFile.writeText(
+                    "Crash at ${java.util.Date()}\n" +
+                        throwable.stackTraceToString()
+                )
+            } catch (e: Exception) {
+                // If we can't even write the crash log, there's nothing more
+                // we can do here — fall through to the default handler.
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
     private val manageStorageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
@@ -46,6 +70,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashLogger()
 
         webView = WebView(this)
         webView.setBackgroundColor(android.graphics.Color.BLACK)
@@ -73,12 +98,16 @@ class MainActivity : ComponentActivity() {
                 message: String?,
                 result: JsResult
             ): Boolean {
-                AlertDialog.Builder(this@MainActivity)
-                    .setMessage(message)
-                    .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
-                    .setOnCancelListener { result.cancel() }
-                    .setCancelable(false)
-                    .show()
+                try {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
+                        .setOnCancelListener { result.cancel() }
+                        .setCancelable(false)
+                        .show()
+                } catch (e: Exception) {
+                    result.confirm()
+                }
                 return true
             }
 
@@ -88,13 +117,17 @@ class MainActivity : ComponentActivity() {
                 message: String?,
                 result: JsResult
             ): Boolean {
-                AlertDialog.Builder(this@MainActivity)
-                    .setMessage(message)
-                    .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
-                    .setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
-                    .setOnCancelListener { result.cancel() }
-                    .setCancelable(false)
-                    .show()
+                try {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
+                        .setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
+                        .setOnCancelListener { result.cancel() }
+                        .setCancelable(false)
+                        .show()
+                } catch (e: Exception) {
+                    result.cancel()
+                }
                 return true
             }
         }
@@ -155,29 +188,6 @@ class MainActivity : ComponentActivity() {
             runOnUiThread {
                 if (hasStoragePermission()) loadChapters()
             }
-        }
-
-        // Permanently deletes the given chapter's .txt file from
-        // /storage/emulated/0/Novel/Chapters. filename must be a plain
-        // file name (no path separators) to prevent escaping the
-        // chapters directory.
-        @JavascriptInterface
-        fun deleteChapterFile(filename: String) {
-            Thread {
-                val safeName = File(filename).name // strips any path components
-                val target = File(chaptersDir, safeName)
-                val success = try {
-                    target.exists() && target.isFile && target.delete()
-                } catch (e: Exception) {
-                    false
-                }
-                runOnUiThread {
-                    webView.evaluateJavascript(
-                        "window.onChapterFileDeleted && window.onChapterFileDeleted(${JSONObject.quote(safeName)}, $success);",
-                        null
-                    )
-                }
-            }.start()
         }
     }
 

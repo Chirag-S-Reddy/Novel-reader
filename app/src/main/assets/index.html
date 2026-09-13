@@ -139,26 +139,6 @@
     word-break: break-word;
   }
 
-  .chapter-delete-btn {
-    flex-shrink: 0;
-    background: none;
-    border: none;
-    color: inherit;
-    opacity: 0;
-    font-size: 13px;
-    padding: 4px 6px;
-    border-radius: 6px;
-    cursor: pointer;
-  }
-
-  #chapter-list li:hover .chapter-delete-btn,
-  #chapter-list li.active .chapter-delete-btn {
-    opacity: .7;
-  }
-  .chapter-delete-btn:hover {
-    opacity: 1 !important;
-    background: rgba(255,80,80,.2);
-  }
   #chapter-list li:hover {
     background: var(--panel-2);
     color: var(--text);
@@ -406,12 +386,6 @@
   #bottom-nav button:hover:not(:disabled) { border-color: var(--accent); }
   #bottom-nav button:disabled { opacity: .35; cursor: not-allowed; }
 
-  #bottom-delete {
-    flex: 0 0 auto;
-    color: #ff8a8a;
-  }
-  #bottom-delete:hover { border-color: #ff5c5c; background: rgba(255,80,80,.12); }
-
   #toggle-sidebar {
     background: var(--panel-2);
     color: var(--text);
@@ -562,7 +536,6 @@
         <div id="chapter-text"></div>
         <div id="bottom-nav">
           <button id="bottom-prev" disabled>‹ Previous Chapter</button>
-          <button id="bottom-delete" title="Permanently delete this chapter file">🗑 Delete</button>
           <button id="bottom-next" disabled>Next Chapter ›</button>
         </div>
       </div>
