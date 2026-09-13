@@ -26,8 +26,11 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
 
-    // Hardcoded chapters directory, as requested.
-    private val chaptersDir = File("/storage/emulated/0/Novel/Chapters")
+    // Root folder containing one subfolder per novel, e.g.
+    // Novel/Shadow-Slave/*.txt, Novel/Iron-Prince/*.txt. The old flat
+    // Novel/Chapters folder (from before novels were split up) is still
+    // recognized and shown as one novel entry, for backward compatibility.
+    private val novelRoot = File("/storage/emulated/0/Novel")
 
     /**
      * Writes any uncaught crash to a plain text file that can be opened
@@ -39,7 +42,7 @@ class MainActivity : ComponentActivity() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                val crashFile = File("/storage/emulated/0/Novel/Chapters/crash_log.txt")
+                val crashFile = File("/storage/emulated/0/Novel/crash_log.txt")
                 crashFile.parentFile?.mkdirs()
                 crashFile.writeText(
                     "Crash at ${java.util.Date()}\n" +
@@ -56,15 +59,15 @@ class MainActivity : ComponentActivity() {
     private val manageStorageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        // Whether granted or not, try loading — loadChapters() will report
+        // Whether granted or not, try loading — listNovels() will report
         // an error to the JS side if permission is still missing.
-        loadChapters()
+        listNovels()
     }
 
     private val legacyPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) loadChapters() else notifyError("Storage permission was not granted.")
+        if (granted) listNovels() else notifyError("Storage permission was not granted.")
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -82,10 +85,10 @@ class MainActivity : ComponentActivity() {
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
                 // The page (and reader.js, which defines window.onFolderPicked)
-                // is now fully loaded, so it's safe to auto-load chapters if
+                // is now fully loaded, so it's safe to auto-load novels if
                 // we already have permission.
                 if (hasStoragePermission()) {
-                    loadChapters()
+                    listNovels()
                 }
             }
         }
@@ -169,15 +172,14 @@ class MainActivity : ComponentActivity() {
         // and comes back — at that point the page is already loaded, so it's
         // always safe to call loadChapters() directly here.
         if (::webView.isInitialized && webView.progress == 100 && hasStoragePermission()) {
-            loadChapters()
+            listNovels()
         }
     }
 
     inner class AndroidBridge {
 
-        // Kept for compatibility with the existing web JS, which calls this
-        // on startup and when the "Open chapters folder" button is tapped.
-        // Both now just (re)load the hardcoded directory.
+        // Called on startup and when the user taps "Grant storage access".
+        // Requests permission if needed, then lists available novels.
         @JavascriptInterface
         fun pickFolder() {
             runOnUiThread { requestPermissionIfNeededThenLoad() }
@@ -186,8 +188,14 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun tryAutoReconnect() {
             runOnUiThread {
-                if (hasStoragePermission()) loadChapters()
+                if (hasStoragePermission()) listNovels()
             }
+        }
+
+        // Loads the chapters for one specific novel subfolder.
+        @JavascriptInterface
+        fun loadNovel(novelFolderName: String) {
+            runOnUiThread { loadNovelChapters(novelFolderName) }
         }
     }
 
@@ -204,7 +212,7 @@ class MainActivity : ComponentActivity() {
 
     private fun requestPermissionIfNeededThenLoad() {
         if (hasStoragePermission()) {
-            loadChapters()
+            listNovels()
             return
         }
 
@@ -224,24 +232,71 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun loadChapters() {
+    /**
+     * Scans /storage/emulated/0/Novel/ for subfolders (one per novel) and
+     * sends the list to JS. The old flat Novel/Chapters folder (used
+     * before novels were split into subfolders) is included as its own
+     * entry too, for backward compatibility with existing setups.
+     */
+    private fun listNovels() {
         Thread {
             try {
                 if (!hasStoragePermission()) {
                     runOnUiThread {
-                        notifyError("Storage permission is needed to read /storage/emulated/0/Novel/Chapters. Tap \"Open chapters folder\" to grant it.")
+                        notifyError("Storage permission is needed to read /storage/emulated/0/Novel. Tap \"Grant storage access\" to allow it.")
                     }
                     return@Thread
                 }
 
-                if (!chaptersDir.exists() || !chaptersDir.isDirectory) {
+                if (!novelRoot.exists()) {
+                    novelRoot.mkdirs()
+                }
+
+                val novelNames = novelRoot.listFiles { f -> f.isDirectory }
+                    ?.map { it.name }
+                    ?.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it })
+                    ?: emptyList()
+
+                val namesArray = JSONArray()
+                novelNames.forEach { namesArray.put(it) }
+
+                runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.onNovelsListed && window.onNovelsListed(${JSONObject.quote(namesArray.toString())});",
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                runOnUiThread { notifyError("Could not read /storage/emulated/0/Novel: ${e.message}") }
+            }
+        }.start()
+    }
+
+    /**
+     * Loads every .txt file inside /storage/emulated/0/Novel/<novelFolderName>/
+     * and sends it to JS as the active novel's chapter list.
+     */
+    private fun loadNovelChapters(novelFolderName: String) {
+        Thread {
+            try {
+                if (!hasStoragePermission()) {
                     runOnUiThread {
-                        notifyError("Folder not found: /storage/emulated/0/Novel/Chapters. Create it and add .txt chapter files.")
+                        notifyError("Storage permission is needed to read that novel's folder.")
                     }
                     return@Thread
                 }
 
-                val txtFiles = chaptersDir.listFiles { f ->
+                val safeName = File(novelFolderName).name // strips any path components
+                val novelDir = File(novelRoot, safeName)
+
+                if (!novelDir.exists() || !novelDir.isDirectory) {
+                    runOnUiThread {
+                        notifyError("Folder not found: /storage/emulated/0/Novel/$safeName")
+                    }
+                    return@Thread
+                }
+
+                val txtFiles = novelDir.listFiles { f ->
                     f.isFile && f.name.lowercase().endsWith(".txt")
                 } ?: emptyArray()
 
@@ -258,7 +313,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val folderNameEscaped = JSONObject.quote("Novel/Chapters")
+                val folderNameEscaped = JSONObject.quote(safeName)
                 val filesJson = filesArray.toString()
                 val filesJsonEscaped = JSONObject.quote(filesJson)
 
@@ -269,7 +324,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             } catch (e: Exception) {
-                runOnUiThread { notifyError("Could not read the chapters folder: ${e.message}") }
+                runOnUiThread { notifyError("Could not read that novel's folder: ${e.message}") }
             }
         }.start()
     }

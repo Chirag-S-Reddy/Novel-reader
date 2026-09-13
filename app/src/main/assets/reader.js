@@ -24,6 +24,7 @@
 
   const chaptersFolderStatus = document.getElementById('chapters-folder-status');
   const openChaptersBtn = document.getElementById('open-chapters-btn');
+  const novelSelect = document.getElementById('novel-select');
 
   function isMobileViewport() {
     return window.matchMedia('(max-width: 720px)').matches;
@@ -129,10 +130,14 @@
 
   /* ---------------------------------------------------------------------
      Native bridge: the Android app injects `window.AndroidBridge` with:
-       - pickFolder(): opens the SAF folder picker (async; result comes
-         back via window.onFolderPicked(folderName, jsonFilesArray))
-       - tryAutoReconnect(): if a folder was previously granted persistent
-         access, re-reads it immediately and calls onFolderPicked again
+       - pickFolder(): requests storage permission if needed, then lists
+         every novel subfolder under /storage/emulated/0/Novel via
+         window.onNovelsListed(jsonNamesArray)
+       - tryAutoReconnect(): if permission was already granted, lists
+         novels immediately the same way
+       - loadNovel(name): reads every .txt file inside that novel's
+         subfolder and delivers it via
+         window.onFolderPicked(folderName, jsonFilesArray)
      jsonFilesArray is a JSON string: [{name, text}, ...]
   --------------------------------------------------------------------- */
 
@@ -158,7 +163,7 @@
     renderChapterList();
     emptyNote.style.display = 'none';
 
-    chaptersFolderStatus.textContent = 'Reading from: /storage/emulated/0/' + folderName;
+    chaptersFolderStatus.textContent = 'Novel: ' + folderName;
     openChaptersBtn.style.display = 'none';
 
     if (chapters.length === 0) {
@@ -187,6 +192,63 @@
     }
     openChaptersBtn.style.display = '';
   };
+
+  const CURRENT_NOVEL_KEY = 'novelReader_currentNovel';
+
+  window.onNovelsListed = function (namesJson) {
+    let names;
+    try {
+      names = JSON.parse(namesJson);
+    } catch (e) {
+      console.error('Failed to parse novel list', e);
+      return;
+    }
+
+    if (!Array.isArray(names) || names.length === 0) {
+      novelSelect.classList.add('hidden');
+      novelSelect.innerHTML = '';
+      chaptersFolderStatus.textContent = '';
+      emptyNote.style.display = '';
+      return;
+    }
+
+    novelSelect.innerHTML = '';
+    names.forEach((name) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      novelSelect.appendChild(opt);
+    });
+
+    if (names.length > 1) {
+      novelSelect.classList.remove('hidden');
+    } else {
+      novelSelect.classList.add('hidden');
+    }
+
+    const savedNovel = localStorage.getItem(CURRENT_NOVEL_KEY);
+    const novelToLoad = (savedNovel && names.includes(savedNovel)) ? savedNovel : names[0];
+    novelSelect.value = novelToLoad;
+    requestNovelLoad(novelToLoad);
+  };
+
+  function requestNovelLoad(novelName) {
+    localStorage.setItem(CURRENT_NOVEL_KEY, novelName);
+    if (window.AndroidBridge && window.AndroidBridge.loadNovel) {
+      window.AndroidBridge.loadNovel(novelName);
+    }
+  }
+
+  novelSelect.addEventListener('change', () => {
+    // Switching novels: reset the reading pane until the new novel's
+    // chapters arrive, so stale content isn't shown mid-switch.
+    chapters = [];
+    currentIndex = -1;
+    chapterListEl.innerHTML = '';
+    welcomeEl.style.display = 'block';
+    readerEl.style.display = 'none';
+    requestNovelLoad(novelSelect.value);
+  });
 
   function pickChaptersFolder() {
     if (window.AndroidBridge && window.AndroidBridge.pickFolder) {
