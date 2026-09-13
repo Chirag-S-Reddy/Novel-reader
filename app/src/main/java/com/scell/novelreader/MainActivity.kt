@@ -120,6 +120,29 @@ class MainActivity : ComponentActivity() {
                 if (hasStoragePermission()) loadChapters()
             }
         }
+
+        // Permanently deletes the given chapter's .txt file from
+        // /storage/emulated/0/Novel/Chapters. filename must be a plain
+        // file name (no path separators) to prevent escaping the
+        // chapters directory.
+        @JavascriptInterface
+        fun deleteChapterFile(filename: String) {
+            Thread {
+                val safeName = File(filename).name // strips any path components
+                val target = File(chaptersDir, safeName)
+                val success = try {
+                    target.exists() && target.isFile && target.delete()
+                } catch (e: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.onChapterFileDeleted && window.onChapterFileDeleted(${JSONObject.quote(safeName)}, $success);",
+                        null
+                    )
+                }
+            }.start()
+        }
     }
 
     private fun hasStoragePermission(): Boolean {

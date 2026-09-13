@@ -220,7 +220,7 @@
       const delBtn = document.createElement('button');
       delBtn.className = 'chapter-delete-btn';
       delBtn.textContent = '🗑';
-      delBtn.title = 'Remove this chapter';
+      delBtn.title = 'Permanently delete this chapter file';
       delBtn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         deleteChapter(i);
@@ -236,9 +236,37 @@
   function deleteChapter(index) {
     const ch = chapters[index];
     if (!ch) return;
-    if (!confirm(`Remove "${ch.title}" from the reading list?\n\n(This only removes it from this list — it will not delete the file on your device.)`)) {
+    if (!confirm(`Permanently delete "${ch.title}"?\n\nThis will delete the actual .txt file from your device. This cannot be undone.`)) {
       return;
     }
+
+    pendingDeleteIndex = index;
+
+    if (window.AndroidBridge && window.AndroidBridge.deleteChapterFile) {
+      window.AndroidBridge.deleteChapterFile(ch.filename);
+    } else {
+      // Fallback (e.g. testing in a plain browser tab): just remove from
+      // the in-app list since there's no real file to delete.
+      finishChapterRemoval(index);
+    }
+  }
+
+  let pendingDeleteIndex = -1;
+
+  window.onChapterFileDeleted = function (filename, success) {
+    if (!success) {
+      alert('Could not delete that file. It may already be gone, or the app may have lost storage permission.');
+      pendingDeleteIndex = -1;
+      return;
+    }
+    if (pendingDeleteIndex === -1) return;
+    finishChapterRemoval(pendingDeleteIndex);
+    pendingDeleteIndex = -1;
+  };
+
+  function finishChapterRemoval(index) {
+    const ch = chapters[index];
+    if (!ch) return;
 
     const deleted = getDeletedSet();
     deleted.add(ch.filename);

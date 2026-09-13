@@ -118,6 +118,7 @@
     overflow-y: auto;
     flex: 1;
     min-height: 0;
+    overscroll-behavior: none;
   }
 
   #chapter-list li {
@@ -190,12 +191,13 @@
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 6px;
-    padding: 10px 12px;
+    gap: 1.5%;
+    width: 100%;
+    padding: 1.5% 2%;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    overflow-x: auto;
+    box-sizing: border-box;
     transition: max-height .25s ease, padding .25s ease, border-color .25s ease;
     max-height: 60px;
   }
@@ -213,29 +215,37 @@
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 8px 12px;
     font-family: inherit;
     font-size: 13px;
     cursor: pointer;
-    flex-shrink: 0;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 40px;
+    padding: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   #topbar button:hover { border-color: var(--accent); }
   #topbar button:disabled { opacity: .4; cursor: not-allowed; }
 
-  #topbar .spacer { flex: 1; min-width: 8px; }
+  #topbar .spacer { flex: 2 1 0; min-width: 0; }
 
   #prev-btn, #next-btn {
     font-size: 18px;
-    padding: 8px 16px;
+    flex: 0.6 1 0;
   }
+
+  #toggle-sidebar { flex: 0.6 1 0; }
 
   #font-controls {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 1.5%;
     color: var(--muted);
     font-size: 13px;
-    flex-shrink: 0;
+    flex: 4 1 0;
+    min-width: 0;
   }
 
   #font-family-select {
@@ -243,11 +253,12 @@
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 7px 8px;
-    font-size: 13px;
+    padding: 0 4px;
+    font-size: 12px;
     cursor: pointer;
-    margin-right: 4px;
-    max-width: 30vw;
+    flex: 2 1 0;
+    min-width: 0;
+    height: 40px;
   }
   #font-family-select:hover { border-color: var(--accent); }
 
@@ -256,10 +267,12 @@
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 7px 9px;
     font-size: 15px;
     cursor: pointer;
-    flex-shrink: 0;
+    flex: 0.6 1 0;
+    min-width: 0;
+    height: 40px;
+    padding: 0;
   }
   #theme-toggle:hover { border-color: var(--accent); }
 
@@ -318,6 +331,7 @@
     display: flex;
     justify-content: center;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: none;
     background: var(--read-bg, transparent);
   }
 
@@ -459,35 +473,16 @@
     }
 
     #topbar {
-      padding: 8px 8px;
-      gap: 4px;
+      gap: 1%;
+      padding: 1% 1.5%;
       position: sticky;
       top: 0;
       z-index: 40;
     }
-    #topbar button {
-      padding: 10px 10px;
-      font-size: 13px;
-      min-height: 40px;
-      min-width: 40px;
-    }
-    #toggle-sidebar {
-      padding: 10px 10px;
-      min-height: 40px;
-      min-width: 44px;
-      font-size: 16px;
-    }
-    #prev-btn, #next-btn { font-size: 20px; padding: 10px 14px; }
 
     #font-controls span { display: none; }
-    #font-controls { gap: 4px; }
-    #font-family-select { max-width: 22vw; padding: 7px 4px; font-size: 12px; }
-    #font-controls button {
-      min-width: 36px;
-      min-height: 40px;
-      font-size: 16px;
-      padding: 6px;
-    }
+    #font-controls { gap: 1%; }
+    #font-family-select { font-size: 11px; }
 
     #theme-panel {
       right: 8px;
@@ -495,6 +490,8 @@
       min-width: 0;
       top: 60px;
     }
+
+    #topbar .spacer { flex: 0 1 6px; min-width: 4px; }
 
     #bottom-nav { margin-top: 36px; gap: 8px; }
     #bottom-nav button {
@@ -565,7 +562,7 @@
         <div id="chapter-text"></div>
         <div id="bottom-nav">
           <button id="bottom-prev" disabled>‹ Previous Chapter</button>
-          <button id="bottom-delete" title="Remove this chapter from list">🗑 Remove</button>
+          <button id="bottom-delete" title="Permanently delete this chapter file">🗑 Delete</button>
           <button id="bottom-next" disabled>Next Chapter ›</button>
         </div>
       </div>
