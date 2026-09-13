@@ -13,10 +13,8 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.view.ViewCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -73,21 +71,13 @@ class MainActivity : ComponentActivity() {
     /**
      * Hides the system navigation bar (the bottom back/home/recents bar)
      * so it doesn't sit over the reader UI. The status bar (clock/battery)
-     * stays visible. A swipe from the bottom edge temporarily reveals the
-     * nav bar again (standard Android "immersive sticky" behavior), and it
-     * auto-hides once more shortly after.
+     * is left completely alone — Android reserves its normal space above
+     * our content automatically, so nothing can render underneath it.
+     * A swipe from the bottom edge temporarily reveals the nav bar again
+     * (standard Android "immersive sticky" behavior), and it auto-hides
+     * once more shortly after.
      */
     private fun setupImmersiveMode() {
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        // Since the window now draws edge-to-edge, pad the WebView by the
-        // status bar's height so our own top bar isn't drawn underneath it.
-        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
-            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
-            view.setPadding(0, statusBarInsets.top, 0, 0)
-            insets
-        }
-
         val controller = WindowInsetsControllerCompat(window, webView)
         controller.hide(WindowInsetsCompat.Type.navigationBars())
         controller.systemBarsBehavior =
