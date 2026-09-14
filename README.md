@@ -18,7 +18,7 @@ screens) fixed.
   disappearing off-screen; flex children have `min-width: 0` so they
   don't get clipped; the font-family dropdown is capped in width on
   narrow screens; bottom nav buttons wrap instead of overflowing.
-- Dark theme only (matches your saved preference).
+- Dark theme default which customisable to other colours.
 
 ## Setting up your chapters folder
 
