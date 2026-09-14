@@ -3,7 +3,6 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
-    # Fix 1: Ignore pushes that only modify documentation files
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -24,9 +23,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Fix 2: Bypassed the broken v3 action by calling the natively updated v4
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+      # We deleted the broken setup-android action entirely.
+      # Instead, we just point your project directly to the native SDK paths already on the runner.
+      - name: Configure Android SDK Environment
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
       - name: Generate Gradle wrapper
         run: gradle wrapper --gradle-version 8.7
@@ -42,4 +45,3 @@ jobs:
         with:
           name: novel-reader-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          
