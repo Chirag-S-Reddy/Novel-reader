@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
@@ -87,9 +88,11 @@ class MainActivity : ComponentActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
-                // The page (and reader.js, which defines window.onFolderPicked)
-                // is now fully loaded, so it's safe to auto-load novels if
-                // we already have permission.
+                // The page (and reader.js, which defines window.onFolderPicked
+                // and window.onStatusBarInset) is now fully loaded, so re-send
+                // the current status bar height in case it loaded before this
+                // fired, and auto-load novels if we already have permission.
+                setupImmersiveMode()
                 if (hasStoragePermission()) {
                     listNovels()
                 }
@@ -144,28 +147,45 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Makes the system navigation bar (the bottom back/home/recents bar)
-     * transparent so our own dark background shows through it, with just
-     * the back/home/recents icons visible on top — the same treatment
-     * apps like Twitter/X use. The bar itself stays permanently present
-     * (never hidden), only its background becomes see-through.
+     * Makes the navigation bar (bottom) transparent, same as before, and
+     * hides the status bar (top) entirely — the notification bar itself
+     * is not drawn at all, though swiping down from the top briefly
+     * reveals it again (standard Android behavior).
      *
-     * The status bar at the top is left completely untouched: we only
-     * let content draw edge-to-edge at the bottom, and we pad the
-     * WebView's bottom-nav area by the nav bar's height so real content
-     * (our Prev/Next buttons etc.) never sits underneath the icons.
+     * Hiding it doesn't remove the physical camera cutout though, so we
+     * still measure exactly how much space the cutout needs (via the
+     * displayCutout inset, not the status bar inset, since the status
+     * bar is hidden and no longer reports a height) and hand that to the
+     * web page as window.onStatusBarInset(heightInCssPx). reader.js uses
+     * that to reserve precisely that much space as a permanent gap above
+     * its own top bar — with a clock drawn in it — so nothing is ever
+     * drawn underneath the camera hole.
      */
     private fun setupImmersiveMode() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+
+        // Let content draw into the cutout area in any orientation, so we
+        // can measure it ourselves and reserve exactly that much space
+        // rather than leaving a system-decided gap behind.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
 
         val controller = WindowInsetsControllerCompat(window, webView)
         controller.isAppearanceLightNavigationBars = false
+        controller.isAppearanceLightStatusBars = false
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.statusBars())
 
         ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
             val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
-            view.setPadding(0, statusBarInsets.top, 0, navBarInsets.bottom)
+            val cutoutInsets = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(0, 0, 0, navBarInsets.bottom)
+            reportTopGapInset(cutoutInsets.top)
             insets
         }
         ViewCompat.requestApplyInsets(webView)
@@ -173,9 +193,21 @@ class MainActivity : ComponentActivity() {
         val currentInsets = ViewCompat.getRootWindowInsets(webView)
         if (currentInsets != null) {
             val navBarInsets = currentInsets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            val statusBarInsets = currentInsets.getInsets(WindowInsetsCompat.Type.statusBars())
-            webView.setPadding(0, statusBarInsets.top, 0, navBarInsets.bottom)
+            val cutoutInsets = currentInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            webView.setPadding(0, 0, 0, navBarInsets.bottom)
+            reportTopGapInset(cutoutInsets.top)
         }
+    }
+
+    /** Tells the web page how tall the front-camera cutout gap is, in CSS px (not raw device px). */
+    private fun reportTopGapInset(topPx: Int) {
+        if (!::webView.isInitialized) return
+        val density = resources.displayMetrics.density
+        val topDp = if (density > 0f) topPx / density else topPx.toFloat()
+        webView.evaluateJavascript(
+            "window.onStatusBarInset && window.onStatusBarInset(${topDp});",
+            null
+        )
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

@@ -2,6 +2,7 @@
   let chapters = [];      // {title, source, text, filename}
   let currentIndex = -1;
   let fontSize = 19;
+  let flipTimer = null;
 
   const chapterListEl = document.getElementById('chapter-list');
   const emptyNote = document.getElementById('empty-note');
@@ -27,6 +28,35 @@
   const novelSelect = document.getElementById('novel-select');
   const readerScrollEl = document.getElementById('reader-scroll');
   const topbarEl = document.getElementById('topbar');
+  const statusClockEl = document.getElementById('status-clock');
+
+  /* ---------------------------------------------------------------------
+     Status bar "lip" + clock.
+     MainActivity reports the exact status bar height (in CSS px) here
+     as soon as it's known, and again after the page finishes loading.
+     We use it to reserve that much space above the top bar so the
+     system notification bar never covers our own controls, and we draw
+     a live clock inside that reserved strip, top-right.
+  --------------------------------------------------------------------- */
+  window.onStatusBarInset = function (px) {
+    const value = typeof px === 'number' && px >= 0 ? px : 0;
+    document.documentElement.style.setProperty('--status-bar-height', value + 'px');
+  };
+
+  function updateStatusClock() {
+    // Always 12-hour with AM/PM, computed manually rather than via
+    // toLocaleTimeString — so it stays 12-hour even on a device whose
+    // system settings are set to 24-hour time.
+    const now = new Date();
+    let h = now.getHours();
+    const m = String(now.getMinutes()).padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    statusClockEl.textContent = h + ':' + m + ' ' + ampm;
+  }
+  updateStatusClock();
+  setInterval(updateStatusClock, 15000);
 
   function isMobileViewport() {
     return window.matchMedia('(max-width: 720px)').matches;
@@ -305,8 +335,28 @@
 
   function openChapter(index) {
     if (index < 0 || index >= chapters.length) return;
+    const prevIndex = currentIndex;
     currentIndex = index;
     const ch = chapters[index];
+
+    // Page-flip animation: only when actually moving from one chapter
+    // to another (not on the very first chapter opened at startup).
+    // Jumping several chapters at once (e.g. picking one far down the
+    // menu) plays a slightly longer flip than a single-chapter step.
+    if (prevIndex !== -1 && prevIndex !== index) {
+      const distance = Math.abs(index - prevIndex);
+      const duration = Math.min(320 + distance * 25, 900);
+      readerEl.style.setProperty('--flip-duration', duration + 'ms');
+      readerEl.classList.remove('flip-next', 'flip-prev');
+      // Force reflow so re-adding the class restarts the animation
+      // even if a previous flip is still finishing.
+      void readerEl.offsetWidth;
+      readerEl.classList.add(index > prevIndex ? 'flip-next' : 'flip-prev');
+      clearTimeout(flipTimer);
+      flipTimer = setTimeout(() => {
+        readerEl.classList.remove('flip-next', 'flip-prev');
+      }, duration);
+    }
 
     welcomeEl.style.display = 'none';
     readerEl.style.display = 'block';
@@ -547,7 +597,11 @@
   /* ---------------------------------------------------------------------
      Touch gestures (reading pane only, so buttons/sidebar/links keep
      working normally):
-       - Swipe left-to-right: open the sidebar menu
+       - Swipe left-to-right: open the sidebar menu, but only if the
+         swipe *starts* within roughly the menu's own width from the
+         left edge (see SIDEBAR_OPEN_SWIPE_ZONE below) — so it behaves
+         like a normal edge-swipe drawer instead of the whole screen
+         being a trigger for it.
        - Swipe right-to-left: close the sidebar if it's open, otherwise
          advance to the next chapter (no gesture for previous chapter)
        - Single tap on the left third of the reading pane: scroll up
@@ -561,6 +615,12 @@
   const SWIPE_MIN_DISTANCE = 60;   // px, minimum horizontal travel to count as a swipe
   const SWIPE_MAX_VERTICAL = 60;   // px, max vertical drift allowed to still count as horizontal
   const TAP_MAX_MOVE = 24;         // px, max finger movement to still count as a tap (not a swipe)
+  // Fraction of the screen width, measured from the left edge, that a
+  // left-to-right swipe must start within to open the sidebar. The
+  // sidebar itself is ~86vw (max 340px) wide; using a bit less than
+  // half the screen keeps the gesture feeling like it's "for the menu"
+  // rather than usable from anywhere on screen.
+  const SIDEBAR_OPEN_SWIPE_ZONE = 0.45;
 
   let touchStartX = 0;
   let touchStartY = 0;
@@ -585,9 +645,12 @@
     // --- Swipe detection: mostly-horizontal drag past the threshold ---
     if (absDx >= SWIPE_MIN_DISTANCE && absDy <= SWIPE_MAX_VERTICAL) {
       if (dx > 0) {
-        // Left-to-right: open the sidebar.
-        sidebar.classList.remove('collapsed');
-        syncScrim();
+        // Left-to-right: open the sidebar, but only if this swipe
+        // started near the left edge (within the menu's own width).
+        if (touchStartX <= window.innerWidth * SIDEBAR_OPEN_SWIPE_ZONE) {
+          sidebar.classList.remove('collapsed');
+          syncScrim();
+        }
       } else {
         // Right-to-left: close the sidebar if open, otherwise next chapter.
         const sidebarIsOpen = isMobileViewport() && !sidebar.classList.contains('collapsed');

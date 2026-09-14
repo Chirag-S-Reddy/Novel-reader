@@ -13,6 +13,12 @@
     --muted: #9498a8;
     --accent: #7c9eff;
     --border: #2f3140;
+    /* Height of the system status bar, reported by the native Android
+       side via window.onStatusBarInset(). Used as a "lip" of extra
+       space above the top bar (and sidebar header) so nothing sits
+       underneath the notification bar. Defaults to a sane guess until
+       the native call arrives. */
+    --status-bar-height: 24px;
   }
 
   * { box-sizing: border-box; min-width: 0; min-height: 0; }
@@ -52,6 +58,7 @@
 
   #sidebar-header {
     padding: 18px 16px 10px 16px;
+    padding-top: calc(18px + var(--status-bar-height));
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
@@ -194,6 +201,7 @@
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     box-sizing: border-box;
+    position: relative;
     transition: max-height .25s ease, padding .25s ease, border-color .25s ease;
     max-height: 60px;
   }
@@ -204,6 +212,34 @@
     padding-bottom: 0;
     border-bottom-color: transparent;
     overflow: hidden;
+  }
+
+  /* Permanent gap reserved above the top bar for the front-camera
+     cutout. Unlike the top bar itself, this never collapses/hides — it
+     stays exactly --status-bar-height tall at all times (set by the
+     native Android side to match the real cutout), whether the top bar
+     is shown or auto-hidden while scrolling, so the clock inside it is
+     always visible and reading content never renders underneath it. */
+  #status-gap {
+    height: var(--status-bar-height);
+    flex-shrink: 0;
+    background: var(--panel);
+    position: relative;
+  }
+
+  /* Live clock, always shown inside the permanent gap, top right. */
+  #status-clock {
+    position: absolute;
+    top: 0;
+    right: 10px;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.3px;
+    pointer-events: none;
+    z-index: 5;
   }
 
   #topbar button {
@@ -274,7 +310,7 @@
 
   #theme-panel {
     position: absolute;
-    top: 54px;
+    top: calc(54px + var(--status-bar-height));
     right: 12px;
     z-index: 50;
     background: var(--panel);
@@ -340,6 +376,7 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: none;
     background: var(--read-bg, transparent);
+    perspective: 1400px;
   }
 
   #reader {
@@ -347,6 +384,44 @@
     width: 100%;
     padding: 50px 34px 100px 34px;
     color: var(--read-text, inherit);
+  }
+
+  /* Page-flip transition, played on the new chapter's content whenever
+     the chapter changes (swipe, buttons, or picking one from the menu).
+     .flip-next plays for advancing forward, .flip-prev is the same
+     animation in reverse for going backward. Duration is set inline
+     per-navigation via --flip-duration (further jumps play a bit
+     longer). Purely cosmetic — never blocks reading or scrolling. */
+  #reader.flip-next,
+  #reader.flip-prev {
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+    animation-duration: var(--flip-duration, 380ms);
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+  }
+  #reader.flip-next {
+    transform-origin: left center;
+    animation-name: pageFlipNext;
+  }
+  #reader.flip-prev {
+    transform-origin: right center;
+    animation-name: pageFlipPrev;
+  }
+
+  @keyframes pageFlipNext {
+    0%   { transform: rotateY(-40deg) scale(0.96); opacity: 0.55; }
+    55%  { transform: rotateY(6deg) scale(1); opacity: 1; }
+    100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+  }
+  @keyframes pageFlipPrev {
+    0%   { transform: rotateY(40deg) scale(0.96); opacity: 0.55; }
+    55%  { transform: rotateY(-6deg) scale(1); opacity: 1; }
+    100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #reader.flip-next, #reader.flip-prev { animation: none; }
   }
 
   #chapter-title {
@@ -454,7 +529,10 @@
     }
     #sidebar-scrim.visible { display: block; }
 
-    #sidebar-header { padding: 16px 14px 10px 14px; }
+    #sidebar-header {
+      padding: 16px 14px 10px 14px;
+      padding-top: calc(16px + var(--status-bar-height));
+    }
     #sidebar-header h1 { font-size: 18px; }
     .load-btn { padding: 13px 10px; font-size: 15px; }
     #chapter-search { padding: 11px 12px; font-size: 15px; }
@@ -481,6 +559,8 @@
       z-index: 40;
     }
 
+    #status-clock { right: 8px; font-size: 11px; }
+
     #font-controls span { display: none; }
     #font-controls { gap: 1%; }
     #font-family-select { font-size: 11px; }
@@ -489,7 +569,7 @@
       right: 8px;
       left: 8px;
       min-width: 0;
-      top: 60px;
+      top: calc(60px + var(--status-bar-height));
     }
 
     #topbar .spacer { flex: 0 1 6px; min-width: 4px; }
@@ -524,6 +604,7 @@
   </div>
 
   <div id="main">
+    <div id="status-gap"><div id="status-clock"></div></div>
     <div id="topbar">
       <button id="toggle-sidebar">☰</button>
       <button id="prev-btn" disabled>‹</button>
