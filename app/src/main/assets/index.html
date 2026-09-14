@@ -285,7 +285,8 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    min-width: 200px;
+    min-width: 220px;
+    max-width: 260px;
   }
   #theme-panel.hidden { display: none; }
 
@@ -298,6 +299,10 @@
     color: var(--text);
   }
 
+  .theme-panel-row label {
+    flex-shrink: 0;
+  }
+
   .theme-panel-row input[type="color"] {
     width: 44px;
     height: 32px;
@@ -306,6 +311,12 @@
     background: none;
     padding: 0;
     cursor: pointer;
+  }
+
+  .theme-panel-row input[type="range"] {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--accent);
   }
 
   #theme-reset-btn {
@@ -541,6 +552,14 @@
       <div class="theme-panel-row">
         <label for="text-color-input">Text</label>
         <input type="color" id="text-color-input" value="#e6e6ea">
+      </div>
+      <div class="theme-panel-row">
+        <label for="line-height-input">Line height</label>
+        <input type="range" id="line-height-input" min="1.2" max="2.6" step="0.1" value="1.9">
+      </div>
+      <div class="theme-panel-row">
+        <label for="letter-spacing-input">Letter spacing</label>
+        <input type="range" id="letter-spacing-input" min="-0.5" max="3" step="0.1" value="0">
       </div>
       <button id="theme-reset-btn">Reset to default</button>
     </div>

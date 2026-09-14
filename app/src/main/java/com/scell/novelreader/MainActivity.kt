@@ -16,6 +16,8 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONArray
@@ -25,6 +27,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
+    private var hasLoadedOnce = false
 
     // Root folder containing one subfolder per novel, e.g.
     // Novel/Shadow-Slave/*.txt, Novel/Iron-Prince/*.txt. The old flat
@@ -141,37 +144,67 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Hides the system navigation bar (the bottom back/home/recents bar)
-     * so it doesn't sit over the reader UI. The status bar (clock/battery)
-     * is left completely alone — Android reserves its normal space above
-     * our content automatically, so nothing can render underneath it.
-     * A swipe from the bottom edge temporarily reveals the nav bar again
-     * (standard Android "immersive sticky" behavior), and it auto-hides
-     * once more shortly after.
+     * Makes the system navigation bar (the bottom back/home/recents bar)
+     * transparent so our own dark background shows through it, with just
+     * the back/home/recents icons visible on top — the same treatment
+     * apps like Twitter/X use. The bar itself stays permanently present
+     * (never hidden), only its background becomes see-through.
+     *
+     * The status bar at the top is left completely untouched: we only
+     * let content draw edge-to-edge at the bottom, and we pad the
+     * WebView's bottom-nav area by the nav bar's height so real content
+     * (our Prev/Next buttons etc.) never sits underneath the icons.
      */
     private fun setupImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
         val controller = WindowInsetsControllerCompat(window, webView)
-        controller.hide(WindowInsetsCompat.Type.navigationBars())
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.isAppearanceLightNavigationBars = false
+
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+            val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            view.setPadding(0, statusBarInsets.top, 0, navBarInsets.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(webView)
+
+        val currentInsets = ViewCompat.getRootWindowInsets(webView)
+        if (currentInsets != null) {
+            val navBarInsets = currentInsets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            val statusBarInsets = currentInsets.getInsets(WindowInsetsCompat.Type.statusBars())
+            webView.setPadding(0, statusBarInsets.top, 0, navBarInsets.bottom)
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
+        if (hasFocus && ::webView.isInitialized) {
             setupImmersiveMode()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::webView.isInitialized) {
+            webView.onPause()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        // Skip the very first onResume right after onCreate — that case is
-        // already handled by onPageFinished above, once the page is ready.
-        // This onResume call matters for the case where the user leaves the
-        // app (e.g. to grant the "All files access" permission in Settings)
-        // and comes back — at that point the page is already loaded, so it's
-        // always safe to call loadChapters() directly here.
-        if (::webView.isInitialized && webView.progress == 100 && hasStoragePermission()) {
+        if (::webView.isInitialized) {
+            webView.onResume()
+        }
+        // Only (re)load novels on resume if we haven't successfully loaded
+        // yet this session — e.g. the user just granted storage permission
+        // in system Settings and is coming back. If we've already loaded
+        // once, ordinary app-switching (checking a notification, etc.)
+        // shouldn't re-scan the whole folder and rebuild the chapter list
+        // every time; reader.js keeps its own state and scroll position
+        // intact across a simple resume.
+        if (::webView.isInitialized && webView.progress == 100 && hasStoragePermission() && !hasLoadedOnce) {
             listNovels()
         }
     }
@@ -261,6 +294,7 @@ class MainActivity : ComponentActivity() {
                 novelNames.forEach { namesArray.put(it) }
 
                 runOnUiThread {
+                    hasLoadedOnce = true
                     webView.evaluateJavascript(
                         "window.onNovelsListed && window.onNovelsListed(${JSONObject.quote(namesArray.toString())});",
                         null

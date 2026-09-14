@@ -25,6 +25,8 @@
   const chaptersFolderStatus = document.getElementById('chapters-folder-status');
   const openChaptersBtn = document.getElementById('open-chapters-btn');
   const novelSelect = document.getElementById('novel-select');
+  const readerScrollEl = document.getElementById('reader-scroll');
+  const topbarEl = document.getElementById('topbar');
 
   function isMobileViewport() {
     return window.matchMedia('(max-width: 720px)').matches;
@@ -110,6 +112,7 @@
 
   function lastChapterStorageKey() { return 'novelReader_lastChapter_' + libraryKey; }
   function deletedStorageKey() { return 'novelReader_deleted_' + libraryKey; }
+  function scrollProgressKey(filename) { return 'novelReader_scrollProgress_' + libraryKey + '_' + filename; }
 
   function getDeletedSet() {
     try {
@@ -126,6 +129,21 @@
   }
   function getLastChapter() {
     return localStorage.getItem(lastChapterStorageKey());
+  }
+
+  // Scroll progress is stored as a 0-1 fraction of the chapter's
+  // scrollable height, not raw pixels, so it still lines up correctly
+  // even if font size or screen size changes between sessions.
+  function saveScrollProgress(filename, fraction) {
+    localStorage.setItem(scrollProgressKey(filename), String(fraction));
+  }
+  function getScrollProgress(filename) {
+    const raw = localStorage.getItem(scrollProgressKey(filename));
+    const value = raw !== null ? parseFloat(raw) : NaN;
+    return isNaN(value) ? 0 : value;
+  }
+  function clearScrollProgress(filename) {
+    localStorage.removeItem(scrollProgressKey(filename));
   }
 
   /* ---------------------------------------------------------------------
@@ -312,8 +330,17 @@
 
     renderChapterList(searchInput.value);
     updateNavButtons();
-    document.getElementById('reader-scroll').scrollTop = 0;
     document.getElementById('topbar').classList.remove('hidden');
+
+    // Restore reading progress for this chapter (0 for a chapter never
+    // opened before, or one finished/reset). Wait a tick so the browser
+    // has laid out the freshly-inserted paragraphs and scrollHeight is
+    // accurate before we compute the target scroll position.
+    requestAnimationFrame(() => {
+      const fraction = getScrollProgress(ch.filename);
+      const maxScroll = readerScrollEl.scrollHeight - readerScrollEl.clientHeight;
+      readerScrollEl.scrollTop = maxScroll > 0 ? fraction * maxScroll : 0;
+    });
 
     if (isMobileViewport()) {
       sidebar.classList.add('collapsed');
@@ -363,6 +390,8 @@
   const PREFS_KEY = 'novelReader_appearance';
   const DEFAULT_BG = '#000000';
   const DEFAULT_TEXT = '#e6e6ea';
+  const DEFAULT_LINE_HEIGHT = 1.9;
+  const DEFAULT_LETTER_SPACING = 0;
 
   function loadPreferences() {
     try {
@@ -385,10 +414,22 @@
     textColorInput.value = text;
   }
 
+  function applyLineHeight(value) {
+    chapterTextEl.style.lineHeight = value;
+    lineHeightInput.value = value;
+  }
+
+  function applyLetterSpacing(value) {
+    chapterTextEl.style.letterSpacing = value + 'px';
+    letterSpacingInput.value = value;
+  }
+
   const themeToggleBtn = document.getElementById('theme-toggle');
   const themePanel = document.getElementById('theme-panel');
   const bgColorInput = document.getElementById('bg-color-input');
   const textColorInput = document.getElementById('text-color-input');
+  const lineHeightInput = document.getElementById('line-height-input');
+  const letterSpacingInput = document.getElementById('letter-spacing-input');
   const themeResetBtn = document.getElementById('theme-reset-btn');
 
   themeToggleBtn.addEventListener('click', () => {
@@ -411,10 +452,24 @@
     savePreference('readText', textColorInput.value);
   });
 
+  lineHeightInput.addEventListener('input', () => {
+    applyLineHeight(lineHeightInput.value);
+    savePreference('lineHeight', parseFloat(lineHeightInput.value));
+  });
+
+  letterSpacingInput.addEventListener('input', () => {
+    applyLetterSpacing(letterSpacingInput.value);
+    savePreference('letterSpacing', parseFloat(letterSpacingInput.value));
+  });
+
   themeResetBtn.addEventListener('click', () => {
     applyReadingColors(DEFAULT_BG, DEFAULT_TEXT);
+    applyLineHeight(DEFAULT_LINE_HEIGHT);
+    applyLetterSpacing(DEFAULT_LETTER_SPACING);
     savePreference('readBg', DEFAULT_BG);
     savePreference('readText', DEFAULT_TEXT);
+    savePreference('lineHeight', DEFAULT_LINE_HEIGHT);
+    savePreference('letterSpacing', DEFAULT_LETTER_SPACING);
   });
 
   // Apply saved preferences on startup.
@@ -431,14 +486,26 @@
     chapterTextEl.style.fontFamily = fontFamily;
 
     applyReadingColors(prefs.readBg || DEFAULT_BG, prefs.readText || DEFAULT_TEXT);
+    applyLineHeight(typeof prefs.lineHeight === 'number' ? prefs.lineHeight : DEFAULT_LINE_HEIGHT);
+    applyLetterSpacing(typeof prefs.letterSpacing === 'number' ? prefs.letterSpacing : DEFAULT_LETTER_SPACING);
   })();
 
-  /* ---- Auto-hide top bar on scroll down, reveal on scroll up ---- */
+  /* ---- Auto-hide top bar on scroll down, reveal on scroll up;
+     also save reading progress (debounced) as the user scrolls. ---- */
 
-  const topbarEl = document.getElementById('topbar');
-  const readerScrollEl = document.getElementById('reader-scroll');
   let lastScrollTop = 0;
   const SCROLL_HIDE_THRESHOLD = 8; // ignore tiny/jittery scroll movements
+  let scrollSaveTimer = null;
+
+  function flushScrollProgress() {
+    if (currentIndex === -1) return;
+    clearTimeout(scrollSaveTimer);
+    scrollSaveTimer = null;
+    const ch = chapters[currentIndex];
+    const maxScroll = readerScrollEl.scrollHeight - readerScrollEl.clientHeight;
+    const fraction = maxScroll > 0 ? readerScrollEl.scrollTop / maxScroll : 0;
+    saveScrollProgress(ch.filename, fraction);
+  }
 
   readerScrollEl.addEventListener('scroll', () => {
     const currentScrollTop = readerScrollEl.scrollTop;
@@ -454,10 +521,101 @@
       topbarEl.classList.remove('hidden');
       lastScrollTop = currentScrollTop;
     }
+
+    if (currentIndex !== -1) {
+      clearTimeout(scrollSaveTimer);
+      scrollSaveTimer = setTimeout(flushScrollProgress, 400);
+    }
   }, { passive: true });
+
+  // Flush immediately (bypassing the 400ms debounce) whenever the app is
+  // about to be backgrounded or closed, so a quick app-switch mid-scroll
+  // never loses progress. 'visibilitychange' is the reliable one in
+  // Android WebView; 'pagehide' is included as a fallback for good measure.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushScrollProgress();
+    }
+  });
+  window.addEventListener('pagehide', flushScrollProgress);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight') openChapter(currentIndex + 1);
     if (e.key === 'ArrowLeft') openChapter(currentIndex - 1);
   });
+
+  /* ---------------------------------------------------------------------
+     Touch gestures (reading pane only, so buttons/sidebar/links keep
+     working normally):
+       - Swipe left-to-right: open the sidebar menu
+       - Swipe right-to-left: close the sidebar if it's open, otherwise
+         advance to the next chapter (no gesture for previous chapter)
+       - Single tap on the left third of the reading pane: scroll up
+         one screen height (pagination)
+       - Single tap on the right third of the reading pane: scroll down
+         one screen height (pagination)
+       - Tap on the middle third: does nothing (reserved, avoids
+         accidental triggers while reading/selecting text)
+  --------------------------------------------------------------------- */
+
+  const SWIPE_MIN_DISTANCE = 60;   // px, minimum horizontal travel to count as a swipe
+  const SWIPE_MAX_VERTICAL = 60;   // px, max vertical drift allowed to still count as horizontal
+  const TAP_MAX_MOVE = 24;         // px, max finger movement to still count as a tap (not a swipe)
+
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTarget = null;
+
+  readerScrollEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTarget = e.target;
+  }, { passive: true });
+
+  readerScrollEl.addEventListener('touchend', (e) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // --- Swipe detection: mostly-horizontal drag past the threshold ---
+    if (absDx >= SWIPE_MIN_DISTANCE && absDy <= SWIPE_MAX_VERTICAL) {
+      if (dx > 0) {
+        // Left-to-right: open the sidebar.
+        sidebar.classList.remove('collapsed');
+        syncScrim();
+      } else {
+        // Right-to-left: close the sidebar if open, otherwise next chapter.
+        const sidebarIsOpen = isMobileViewport() && !sidebar.classList.contains('collapsed');
+        if (sidebarIsOpen) {
+          sidebar.classList.add('collapsed');
+          syncScrim();
+        } else {
+          openChapter(currentIndex + 1);
+        }
+      }
+      return; // don't also evaluate this as a tap
+    }
+
+    // --- Tap-to-scroll pagination: only for taps that started inside
+    //     the reading pane and barely moved (a tap, not a swipe) ---
+    if (absDx > TAP_MAX_MOVE || absDy > TAP_MAX_MOVE) return;
+
+    // Ignore taps on real interactive elements (links) inside the text.
+    if (touchStartTarget && touchStartTarget.closest && touchStartTarget.closest('a')) return;
+
+    const zone = touch.clientX / window.innerWidth;
+    const pageHeight = readerScrollEl.clientHeight * 0.9; // slight overlap so context carries over
+
+    if (zone <= 1 / 3) {
+      readerScrollEl.scrollBy({ top: -pageHeight, behavior: 'smooth' });
+    } else if (zone >= 2 / 3) {
+      readerScrollEl.scrollBy({ top: pageHeight, behavior: 'smooth' });
+    }
+    // middle third: no-op
+  }, { passive: true });
 })();
