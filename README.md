@@ -1,8 +1,6 @@
 # Novel Reader — Android App
 
-A native Android app version of the novel reader, with the music player
-removed and the layout bugs (buttons disappearing/overflowing on small
-screens) fixed.
+A native Android app version of the novel reader, without the music player(it is in development).
 
 ## Current features 
 
@@ -50,7 +48,3 @@ the app at a different location, that requires changing the path in
 4. Use Prev/Next (top bar or bottom of chapter) to navigate, adjust
    font size/family in the top bar, and search chapters via the filter
    box in the sidebar.
-
-Chapter files are read either in the original `chapter_downloader.py`
-format (title / `Source:` line / `====` separator / body) or as plain
-text files — either works.
