@@ -4,9 +4,9 @@ A native Android app version of the novel reader, with the music player
 removed and the layout bugs (buttons disappearing/overflowing on small
 screens) fixed.
 
-## What changed from the HTML template
+## Current features 
 
-- **Music player removed entirely** — no audio UI, no audio code.
+- **Music player removed entirely** — no audio UI, no audio code due to issues will be adressed in future.
 - **Chapters folder is hardcoded** to
   `/storage/emulated/0/Novel/Chapters` (internal storage → `Novel` →
   `Chapters`). The app reads directly from this fixed path using
