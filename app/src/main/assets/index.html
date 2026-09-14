@@ -396,8 +396,8 @@
   #reader.flip-prev {
     transform-style: preserve-3d;
     backface-visibility: hidden;
-    animation-duration: var(--flip-duration, 380ms);
-    animation-timing-function: ease-in-out;
+    animation-duration: var(--flip-duration, 2000ms);
+    animation-timing-function: cubic-bezier(.4, 0, .2, 1);
     animation-fill-mode: both;
   }
   #reader.flip-next {
@@ -410,14 +410,16 @@
   }
 
   @keyframes pageFlipNext {
-    0%   { transform: rotateY(-40deg) scale(0.96); opacity: 0.55; }
-    55%  { transform: rotateY(6deg) scale(1); opacity: 1; }
-    100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+    0%   { transform: rotateY(-72deg) scale(0.95); opacity: 0.45; filter: brightness(0.8); }
+    55%  { transform: rotateY(12deg) scale(1); opacity: 1; filter: brightness(1.08); }
+    80%  { transform: rotateY(-3deg); filter: brightness(1); }
+    100% { transform: rotateY(0deg) scale(1); opacity: 1; filter: brightness(1); }
   }
   @keyframes pageFlipPrev {
-    0%   { transform: rotateY(40deg) scale(0.96); opacity: 0.55; }
-    55%  { transform: rotateY(-6deg) scale(1); opacity: 1; }
-    100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+    0%   { transform: rotateY(72deg) scale(0.95); opacity: 0.45; filter: brightness(0.8); }
+    55%  { transform: rotateY(-12deg) scale(1); opacity: 1; filter: brightness(1.08); }
+    80%  { transform: rotateY(3deg); filter: brightness(1); }
+    100% { transform: rotateY(0deg) scale(1); opacity: 1; filter: brightness(1); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -514,20 +516,22 @@
       width: 86vw;
       max-width: 340px;
       z-index: 70;
-      transition: transform .2s ease;
+      transition: transform .22s ease;
       transform: translateX(-100%);
       box-shadow: 4px 0 24px rgba(0,0,0,.5);
     }
     #sidebar:not(.collapsed) { transform: translateX(0); }
 
     #sidebar-scrim {
-      display: none;
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,.5);
       z-index: 65;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .22s ease;
     }
-    #sidebar-scrim.visible { display: block; }
+    #sidebar-scrim.visible { opacity: 1; pointer-events: auto; }
 
     #sidebar-header {
       padding: 16px 14px 10px 14px;
@@ -641,6 +645,10 @@
       <div class="theme-panel-row">
         <label for="letter-spacing-input">Letter spacing</label>
         <input type="range" id="letter-spacing-input" min="-0.5" max="3" step="0.1" value="0">
+      </div>
+      <div class="theme-panel-row">
+        <label for="flip-duration-input">Page flip duration</label>
+        <input type="range" id="flip-duration-input" min="200" max="3000" step="50" value="2000">
       </div>
       <button id="theme-reset-btn">Reset to default</button>
     </div>

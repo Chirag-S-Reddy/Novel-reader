@@ -3,6 +3,7 @@
   let currentIndex = -1;
   let fontSize = 19;
   let flipTimer = null;
+  let flipDurationBase = 2000; // ms; user-adjustable via the theme panel slider
 
   const chapterListEl = document.getElementById('chapter-list');
   const emptyNote = document.getElementById('empty-note');
@@ -342,10 +343,10 @@
     // Page-flip animation: only when actually moving from one chapter
     // to another (not on the very first chapter opened at startup).
     // Jumping several chapters at once (e.g. picking one far down the
-    // menu) plays a slightly longer flip than a single-chapter step.
+    // menu) plays a longer flip than a single-chapter step.
     if (prevIndex !== -1 && prevIndex !== index) {
       const distance = Math.abs(index - prevIndex);
-      const duration = Math.min(320 + distance * 25, 900);
+      const duration = Math.min(flipDurationBase + distance * 60, flipDurationBase + 800);
       readerEl.style.setProperty('--flip-duration', duration + 'ms');
       readerEl.classList.remove('flip-next', 'flip-prev');
       // Force reflow so re-adding the class restarts the animation
@@ -442,6 +443,7 @@
   const DEFAULT_TEXT = '#e6e6ea';
   const DEFAULT_LINE_HEIGHT = 1.9;
   const DEFAULT_LETTER_SPACING = 0;
+  const DEFAULT_FLIP_DURATION = 2000;
 
   function loadPreferences() {
     try {
@@ -474,12 +476,18 @@
     letterSpacingInput.value = value;
   }
 
+  function applyFlipDuration(value) {
+    flipDurationBase = parseInt(value, 10) || DEFAULT_FLIP_DURATION;
+    flipDurationInput.value = flipDurationBase;
+  }
+
   const themeToggleBtn = document.getElementById('theme-toggle');
   const themePanel = document.getElementById('theme-panel');
   const bgColorInput = document.getElementById('bg-color-input');
   const textColorInput = document.getElementById('text-color-input');
   const lineHeightInput = document.getElementById('line-height-input');
   const letterSpacingInput = document.getElementById('letter-spacing-input');
+  const flipDurationInput = document.getElementById('flip-duration-input');
   const themeResetBtn = document.getElementById('theme-reset-btn');
 
   themeToggleBtn.addEventListener('click', () => {
@@ -512,14 +520,21 @@
     savePreference('letterSpacing', parseFloat(letterSpacingInput.value));
   });
 
+  flipDurationInput.addEventListener('input', () => {
+    applyFlipDuration(flipDurationInput.value);
+    savePreference('flipDuration', flipDurationBase);
+  });
+
   themeResetBtn.addEventListener('click', () => {
     applyReadingColors(DEFAULT_BG, DEFAULT_TEXT);
     applyLineHeight(DEFAULT_LINE_HEIGHT);
     applyLetterSpacing(DEFAULT_LETTER_SPACING);
+    applyFlipDuration(DEFAULT_FLIP_DURATION);
     savePreference('readBg', DEFAULT_BG);
     savePreference('readText', DEFAULT_TEXT);
     savePreference('lineHeight', DEFAULT_LINE_HEIGHT);
     savePreference('letterSpacing', DEFAULT_LETTER_SPACING);
+    savePreference('flipDuration', DEFAULT_FLIP_DURATION);
   });
 
   // Apply saved preferences on startup.
@@ -538,6 +553,7 @@
     applyReadingColors(prefs.readBg || DEFAULT_BG, prefs.readText || DEFAULT_TEXT);
     applyLineHeight(typeof prefs.lineHeight === 'number' ? prefs.lineHeight : DEFAULT_LINE_HEIGHT);
     applyLetterSpacing(typeof prefs.letterSpacing === 'number' ? prefs.letterSpacing : DEFAULT_LETTER_SPACING);
+    applyFlipDuration(typeof prefs.flipDuration === 'number' ? prefs.flipDuration : DEFAULT_FLIP_DURATION);
   })();
 
   /* ---- Auto-hide top bar on scroll down, reveal on scroll up;
@@ -612,15 +628,14 @@
          accidental triggers while reading/selecting text)
   --------------------------------------------------------------------- */
 
-  const SWIPE_MIN_DISTANCE = 60;   // px, minimum horizontal travel to count as a swipe
-  const SWIPE_MAX_VERTICAL = 60;   // px, max vertical drift allowed to still count as horizontal
+  const SWIPE_MIN_DISTANCE = 40;   // px, minimum horizontal travel to count as a swipe (lowered so quick/short swipes still register)
   const TAP_MAX_MOVE = 24;         // px, max finger movement to still count as a tap (not a swipe)
   // Fraction of the screen width, measured from the left edge, that a
   // left-to-right swipe must start within to open the sidebar. The
-  // sidebar itself is ~86vw (max 340px) wide; using a bit less than
-  // half the screen keeps the gesture feeling like it's "for the menu"
-  // rather than usable from anywhere on screen.
-  const SIDEBAR_OPEN_SWIPE_ZONE = 0.45;
+  // sidebar itself is ~86vw (max 340px) wide; using about half the
+  // screen keeps the gesture feeling like it's "for the menu" rather
+  // than usable from anywhere on screen, while still being easy to hit.
+  const SIDEBAR_OPEN_SWIPE_ZONE = 0.5;
 
   let touchStartX = 0;
   let touchStartY = 0;
@@ -642,8 +657,11 @@
     const absDx = Math.abs(dx);
     const absDy = Math.abs(dy);
 
-    // --- Swipe detection: mostly-horizontal drag past the threshold ---
-    if (absDx >= SWIPE_MIN_DISTANCE && absDy <= SWIPE_MAX_VERTICAL) {
+    // --- Swipe detection: horizontal drag past the threshold, where
+    //     the horizontal travel clearly dominates the vertical drift.
+    //     Using a ratio (instead of a fixed vertical-drift cap) means a
+    //     natural, slightly-diagonal swipe still registers reliably. ---
+    if (absDx >= SWIPE_MIN_DISTANCE && absDx > absDy * 1.2) {
       if (dx > 0) {
         // Left-to-right: open the sidebar, but only if this swipe
         // started near the left edge (within the menu's own width).
