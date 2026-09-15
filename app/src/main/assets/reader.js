@@ -168,6 +168,68 @@
   function saveScrollProgress(filename, fraction) {
     localStorage.setItem(scrollProgressKey(filename), String(fraction));
   }
+
+  /* ---- Bookmarks (per novel): whole chapters and specific paragraphs ---- */
+
+  function bookmarksStorageKey() { return 'novelReader_bookmarks_' + libraryKey; }
+
+  function getBookmarks() {
+    try {
+      return JSON.parse(localStorage.getItem(bookmarksStorageKey()) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveBookmarks(list) {
+    localStorage.setItem(bookmarksStorageKey(), JSON.stringify(list));
+  }
+
+  // A bookmark is: { filename, chapterTitle, type: 'chapter' | 'paragraph',
+  //                  paragraphIndex (only for type 'paragraph'), snippet (only for type 'paragraph') }
+
+  function isChapterBookmarked(filename) {
+    return getBookmarks().some(b => b.type === 'chapter' && b.filename === filename);
+  }
+
+  function toggleChapterBookmark(filename, chapterTitle) {
+    const list = getBookmarks();
+    const idx = list.findIndex(b => b.type === 'chapter' && b.filename === filename);
+    if (idx !== -1) {
+      list.splice(idx, 1);
+    } else {
+      list.push({ filename, chapterTitle, type: 'chapter' });
+    }
+    saveBookmarks(list);
+  }
+
+  function isParagraphBookmarked(filename, paragraphIndex) {
+    return getBookmarks().some(b => b.type === 'paragraph' && b.filename === filename && b.paragraphIndex === paragraphIndex);
+  }
+
+  function toggleParagraphBookmark(filename, chapterTitle, paragraphIndex, snippet) {
+    const list = getBookmarks();
+    const idx = list.findIndex(b => b.type === 'paragraph' && b.filename === filename && b.paragraphIndex === paragraphIndex);
+    if (idx !== -1) {
+      list.splice(idx, 1);
+    } else {
+      list.push({ filename, chapterTitle, type: 'paragraph', paragraphIndex, snippet });
+    }
+    saveBookmarks(list);
+  }
+
+  function removeBookmark(bookmark) {
+    const list = getBookmarks();
+    const idx = list.findIndex(b =>
+      b.type === bookmark.type &&
+      b.filename === bookmark.filename &&
+      b.paragraphIndex === bookmark.paragraphIndex
+    );
+    if (idx !== -1) {
+      list.splice(idx, 1);
+      saveBookmarks(list);
+    }
+  }
   function getScrollProgress(filename) {
     const raw = localStorage.getItem(scrollProgressKey(filename));
     const value = raw !== null ? parseFloat(raw) : NaN;
@@ -368,14 +430,23 @@
       : '';
 
     chapterTextEl.innerHTML = '';
+    let paraIndex = 0;
     ch.text.split(/\n\s*\n/).forEach(para => {
       const trimmed = para.trim();
       if (!trimmed) return;
       if (isNoiseParagraph(trimmed, ch.title)) return;
       const p = document.createElement('p');
       p.textContent = trimmed;
+      p.dataset.paragraphIndex = paraIndex;
+      if (isParagraphBookmarked(ch.filename, paraIndex)) {
+        p.classList.add('paragraph-bookmarked');
+      }
       chapterTextEl.appendChild(p);
+      paraIndex++;
     });
+
+    updateChapterBookmarkButton();
+    renderBookmarksList();
 
     saveLastChapter(ch.filename);
 
@@ -404,7 +475,18 @@
     const hasNext = currentIndex < chapters.length - 1;
     [prevBtn, bottomPrev].forEach(b => b.disabled = !hasPrev);
     [nextBtn, bottomNext].forEach(b => b.disabled = !hasNext);
+
+    const openTermuxBtn = document.getElementById('open-termux-btn');
+    openTermuxBtn.classList.toggle('hidden', hasNext || currentIndex === -1);
   }
+
+  document.getElementById('open-termux-btn').addEventListener('click', () => {
+    if (window.AndroidBridge && window.AndroidBridge.openTermux) {
+      window.AndroidBridge.openTermux();
+    } else {
+      alert('Termux launch is only available in the installed app.');
+    }
+  });
 
   prevBtn.addEventListener('click', () => openChapter(currentIndex - 1));
   nextBtn.addEventListener('click', () => openChapter(currentIndex + 1));
@@ -556,6 +638,162 @@
     applyFlipDuration(typeof prefs.flipDuration === 'number' ? prefs.flipDuration : DEFAULT_FLIP_DURATION);
   })();
 
+  /* ---- Bookmarking UI: chapter toggle button, paragraph long-press,
+     and a panel listing every bookmark for the current novel. ---- */
+
+  const bookmarkToggleBtn = document.getElementById('bookmark-toggle');
+  const bookmarksPanel = document.getElementById('bookmarks-panel');
+  const bookmarkChapterBtn = document.getElementById('bookmark-chapter-btn');
+  const bookmarksListEl = document.getElementById('bookmarks-list');
+  const bookmarksEmptyEl = document.getElementById('bookmarks-empty');
+
+  function updateChapterBookmarkButton() {
+    if (currentIndex === -1) return;
+    const ch = chapters[currentIndex];
+    const bookmarked = isChapterBookmarked(ch.filename);
+    bookmarkChapterBtn.textContent = bookmarked ? '★ Bookmarked' : '☆ Bookmark this chapter';
+    bookmarkChapterBtn.classList.toggle('active', bookmarked);
+    bookmarkToggleBtn.classList.toggle('active', bookmarked || getBookmarks().length > 0);
+  }
+
+  function renderBookmarksList() {
+    const list = getBookmarks();
+    bookmarksListEl.innerHTML = '';
+
+    if (list.length === 0) {
+      bookmarksEmptyEl.style.display = '';
+      return;
+    }
+    bookmarksEmptyEl.style.display = 'none';
+
+    list.forEach((b) => {
+      const li = document.createElement('li');
+
+      const label = document.createElement('span');
+      label.className = 'bookmark-item-label';
+      label.textContent = b.type === 'chapter'
+        ? '📖 ' + b.chapterTitle
+        : '¶ ' + b.chapterTitle + ' — ' + b.snippet;
+      label.title = label.textContent;
+      label.addEventListener('click', () => jumpToBookmark(b));
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'bookmark-remove-btn';
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'Remove bookmark';
+      removeBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        removeBookmark(b);
+        renderBookmarksList();
+        updateChapterBookmarkButton();
+        // Refresh paragraph highlighting if we removed one in the open chapter.
+        if (currentIndex !== -1 && chapters[currentIndex].filename === b.filename) {
+          refreshParagraphBookmarkHighlights();
+        }
+      });
+
+      li.appendChild(label);
+      li.appendChild(removeBtn);
+      bookmarksListEl.appendChild(li);
+    });
+  }
+
+  function jumpToBookmark(bookmark) {
+    const targetIndex = chapters.findIndex(c => c.filename === bookmark.filename);
+    if (targetIndex === -1) {
+      alert('That chapter is no longer available in this novel.');
+      return;
+    }
+    bookmarksPanel.classList.add('hidden');
+    openChapter(targetIndex);
+    if (bookmark.type === 'paragraph') {
+      // Wait for the chapter's content and scroll-restore to settle, then
+      // scroll precisely to the bookmarked paragraph.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const p = chapterTextEl.querySelector(`p[data-paragraph-index="${bookmark.paragraphIndex}"]`);
+          if (p) p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+    }
+  }
+
+  function refreshParagraphBookmarkHighlights() {
+    if (currentIndex === -1) return;
+    const ch = chapters[currentIndex];
+    chapterTextEl.querySelectorAll('p[data-paragraph-index]').forEach(p => {
+      const idx = parseInt(p.dataset.paragraphIndex, 10);
+      p.classList.toggle('paragraph-bookmarked', isParagraphBookmarked(ch.filename, idx));
+    });
+  }
+
+  bookmarkToggleBtn.addEventListener('click', () => {
+    bookmarksPanel.classList.toggle('hidden');
+    if (!bookmarksPanel.classList.contains('hidden')) {
+      renderBookmarksList();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (bookmarksPanel.classList.contains('hidden')) return;
+    if (bookmarksPanel.contains(e.target) || e.target === bookmarkToggleBtn) return;
+    bookmarksPanel.classList.add('hidden');
+  });
+
+  bookmarkChapterBtn.addEventListener('click', () => {
+    if (currentIndex === -1) return;
+    const ch = chapters[currentIndex];
+    toggleChapterBookmark(ch.filename, ch.title);
+    updateChapterBookmarkButton();
+    renderBookmarksList();
+  });
+
+  // Long-press (~500ms, without much finger movement) on a paragraph
+  // toggles a bookmark for that specific paragraph.
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_MAX_MOVE = 12;
+  let longPressTimer = null;
+  let longPressStartX = 0;
+  let longPressStartY = 0;
+  let longPressTarget = null;
+  let longPressFired = false;
+
+  chapterTextEl.addEventListener('touchstart', (e) => {
+    const p = e.target.closest && e.target.closest('p[data-paragraph-index]');
+    if (!p) return;
+    longPressFired = false;
+    longPressStartX = e.touches[0].clientX;
+    longPressStartY = e.touches[0].clientY;
+    longPressTarget = p;
+    longPressTimer = setTimeout(() => {
+      if (currentIndex === -1) return;
+      longPressFired = true;
+      const ch = chapters[currentIndex];
+      const idx = parseInt(p.dataset.paragraphIndex, 10);
+      const snippet = p.textContent.slice(0, 60) + (p.textContent.length > 60 ? '…' : '');
+      toggleParagraphBookmark(ch.filename, ch.title, idx, snippet);
+      p.classList.toggle('paragraph-bookmarked', isParagraphBookmarked(ch.filename, idx));
+      updateChapterBookmarkButton();
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+
+  chapterTextEl.addEventListener('touchmove', (e) => {
+    if (!longPressTimer) return;
+    const dx = Math.abs(e.touches[0].clientX - longPressStartX);
+    const dy = Math.abs(e.touches[0].clientY - longPressStartY);
+    if (dx > LONG_PRESS_MAX_MOVE || dy > LONG_PRESS_MAX_MOVE) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }, { passive: true });
+
+  chapterTextEl.addEventListener('touchend', () => {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }, { passive: true });
+
+
   /* ---- Auto-hide top bar on scroll down, reveal on scroll up;
      also save reading progress (debounced) as the user scrolls. ---- */
 
@@ -685,6 +923,13 @@
     // --- Tap-to-scroll pagination: only for taps that started inside
     //     the reading pane and barely moved (a tap, not a swipe) ---
     if (absDx > TAP_MAX_MOVE || absDy > TAP_MAX_MOVE) return;
+
+    // A long-press on a paragraph (bookmarking it) just fired for this
+    // same touch — don't also treat the release as a pagination tap.
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
 
     // Ignore taps on real interactive elements (links) inside the text.
     if (touchStartTarget && touchStartTarget.closest && touchStartTarget.closest('a')) return;

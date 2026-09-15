@@ -227,15 +227,17 @@
     position: relative;
   }
 
-  /* Live clock, always shown inside the permanent gap, top right. */
+  /* Live clock, always shown inside the permanent gap, top right.
+     Shifted left ~25mm from the edge and bold, per user preference. */
   #status-clock {
     position: absolute;
     top: 0;
-    right: 10px;
+    right: 25mm;
     bottom: 0;
     display: flex;
     align-items: center;
     font-size: 12px;
+    font-weight: bold;
     color: var(--muted);
     letter-spacing: 0.3px;
     pointer-events: none;
@@ -367,6 +369,119 @@
   }
   #theme-reset-btn:hover { border-color: var(--accent); }
 
+  #bookmark-toggle {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 15px;
+    cursor: pointer;
+    flex: 0.6 1 0;
+    min-width: 0;
+    height: 40px;
+    padding: 0;
+  }
+  #bookmark-toggle:hover { border-color: var(--accent); }
+  #bookmark-toggle.active { color: #ffd166; border-color: #ffd166; }
+
+  #bookmarks-panel {
+    position: absolute;
+    top: calc(54px + var(--status-bar-height));
+    right: 12px;
+    z-index: 50;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 240px;
+    max-width: 300px;
+    max-height: 60vh;
+  }
+  #bookmarks-panel.hidden { display: none; }
+
+  #bookmarks-panel-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text);
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  #bookmark-chapter-btn {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: normal;
+    cursor: pointer;
+  }
+  #bookmark-chapter-btn:hover { border-color: var(--accent); }
+  #bookmark-chapter-btn.active { color: #ffd166; border-color: #ffd166; }
+
+  #bookmarks-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  #bookmarks-list li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--panel-2);
+  }
+  #bookmarks-list li:hover { border: 1px solid var(--accent); }
+
+  .bookmark-item-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bookmark-remove-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .bookmark-remove-btn:hover { color: #ff8a8a; background: rgba(255,80,80,.15); }
+
+  #bookmarks-empty {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .paragraph-bookmarked {
+    background: rgba(255, 209, 102, 0.1);
+    border-left: 3px solid #ffd166;
+    padding-left: 10px !important;
+    margin-left: -13px !important;
+  }
+
   #reader-scroll {
     flex: 1;
     min-height: 0;
@@ -490,6 +605,24 @@
   #bottom-nav button:hover:not(:disabled) { border-color: var(--accent); }
   #bottom-nav button:disabled { opacity: .35; cursor: not-allowed; }
 
+  #open-termux-btn {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    text-align: center;
+  }
+  #open-termux-btn:hover { filter: brightness(1.08); }
+  #open-termux-btn.hidden { display: none; }
+
   #toggle-sidebar {
     background: var(--panel-2);
     color: var(--text);
@@ -563,7 +696,7 @@
       z-index: 40;
     }
 
-    #status-clock { right: 8px; font-size: 11px; }
+    #status-clock { right: 25mm; font-size: 11px; }
 
     #font-controls span { display: none; }
     #font-controls { gap: 1%; }
@@ -573,6 +706,14 @@
       right: 8px;
       left: 8px;
       min-width: 0;
+      top: calc(60px + var(--status-bar-height));
+    }
+
+    #bookmarks-panel {
+      right: 8px;
+      left: 8px;
+      min-width: 0;
+      max-width: none;
       top: calc(60px + var(--status-bar-height));
     }
 
@@ -626,7 +767,17 @@
         <button id="font-smaller">–</button>
         <button id="font-bigger">+</button>
         <button id="theme-toggle" title="Customize reading colors">🎨</button>
+        <button id="bookmark-toggle" title="Bookmarks">🔖</button>
       </div>
+    </div>
+
+    <div id="bookmarks-panel" class="hidden">
+      <div id="bookmarks-panel-header">
+        <span>Bookmarks</span>
+        <button id="bookmark-chapter-btn">☆ Bookmark this chapter</button>
+      </div>
+      <ul id="bookmarks-list"></ul>
+      <div id="bookmarks-empty">No bookmarks yet. Bookmark a chapter above, or long-press any paragraph while reading to bookmark that spot.</div>
     </div>
 
     <div id="theme-panel" class="hidden">
@@ -663,6 +814,7 @@
           <button id="bottom-prev" disabled>‹ Previous Chapter</button>
           <button id="bottom-next" disabled>Next Chapter ›</button>
         </div>
+        <button id="open-termux-btn" class="hidden">🖥 Open Termux to get more chapters</button>
       </div>
     </div>
   </div>

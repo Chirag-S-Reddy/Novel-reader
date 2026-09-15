@@ -170,8 +170,10 @@ class MainActivity : ComponentActivity() {
         // can measure it ourselves and reserve exactly that much space
         // rather than leaving a system-decided gap behind.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes.layoutInDisplayCutoutMode =
+            val params = window.attributes
+            params.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            window.attributes = params
         }
 
         val controller = WindowInsetsControllerCompat(window, webView)
@@ -261,6 +263,22 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun loadNovel(novelFolderName: String) {
             runOnUiThread { loadNovelChapters(novelFolderName) }
+        }
+
+        // Opens the Termux app (if installed) — shown once the user
+        // reaches the end of a novel, as a quick way to run the chapter
+        // downloader for more chapters.
+        @JavascriptInterface
+        fun openTermux() {
+            runOnUiThread {
+                val launchIntent = packageManager.getLaunchIntentForPackage("com.termux")
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(launchIntent)
+                } else {
+                    notifyError("Termux isn't installed on this device.")
+                }
+            }
         }
     }
 
