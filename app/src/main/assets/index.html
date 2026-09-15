@@ -180,6 +180,31 @@
     flex-shrink: 0;
   }
 
+  #sidebar-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  #sidebar-footer .theme-panel-row {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  #sidebar-footer input[type="range"] {
+    accent-color: var(--accent);
+    flex: 1;
+    min-width: 0;
+    margin-left: 10px;
+  }
+
+  #session-limit-value {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+    margin-top: 4px;
+  }
+
   /* Main reading area */
   #main {
     flex: 1;
@@ -243,6 +268,22 @@
     pointer-events: none;
     z-index: 5;
   }
+
+  /* Reading session timer, left side of the same gap. Plain
+     read-only indicator — configuration lives in the sidebar footer. */
+  #session-timer {
+    position: absolute;
+    top: 0;
+    left: 10px;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    color: var(--muted);
+    pointer-events: none;
+    z-index: 5;
+  }
+  #session-timer:empty { display: none; }
 
   #topbar button {
     background: var(--panel-2);
@@ -730,6 +771,56 @@
     #welcome h2 { font-size: 22px; }
     #welcome .steps { padding: 16px 18px; font-size: 14px; }
   }
+
+  /* Session-limit blocking overlay — sits above everything, including
+     the sidebar, dimming the whole app until dismissed. */
+  #session-limit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.88);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  #session-limit-overlay.hidden { display: none; }
+
+  #session-limit-box {
+    max-width: 340px;
+    text-align: center;
+    color: var(--text);
+  }
+
+  #session-limit-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  #session-limit-box h2 {
+    margin: 0 0 10px 0;
+    font-size: 22px;
+    color: var(--accent);
+  }
+
+  #session-limit-box p {
+    margin: 0 0 24px 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  #session-limit-dismiss-btn {
+    padding: 12px 24px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #session-limit-dismiss-btn:hover { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -746,10 +837,18 @@
     </div>
     <ul id="chapter-list"></ul>
     <div id="empty-note">No novels found yet. This app reads from /storage/emulated/0/Novel — tap "Grant storage access" to allow it, then add a subfolder per novel with its .txt chapter files inside.</div>
+
+    <div id="sidebar-footer">
+      <div class="theme-panel-row">
+        <label for="session-limit-input">Session limit</label>
+        <input type="range" id="session-limit-input" min="0" max="180" step="5" value="0">
+      </div>
+      <div id="session-limit-value">Off</div>
+    </div>
   </div>
 
   <div id="main">
-    <div id="status-gap"><div id="status-clock"></div></div>
+    <div id="status-gap"><div id="status-clock"></div><div id="session-timer" title="Reading session time"></div></div>
     <div id="topbar">
       <button id="toggle-sidebar">☰</button>
       <button id="prev-btn" disabled>‹</button>
@@ -820,6 +919,16 @@
   </div>
 </div>
 
+<div id="session-limit-overlay" class="hidden">
+  <div id="session-limit-box">
+    <div id="session-limit-icon">⏳</div>
+    <h2>Reading break</h2>
+    <p>You've hit your reading session limit for now.</p>
+    <button id="session-limit-dismiss-btn">Keep reading anyway</button>
+  </div>
+</div>
+
 <script src="reader.js"></script>
 </body>
+
 </html>

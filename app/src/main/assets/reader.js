@@ -843,6 +843,96 @@
   });
   window.addEventListener('pagehide', flushScrollProgress);
 
+  /* ---------------------------------------------------------------------
+     Active reading session tracker + optional session limit.
+
+     "Active" means the app is in the foreground (document visible) —
+     time spent backgrounded doesn't count. Elapsed time resets when the
+     app is fully closed and reopened (it's an in-memory counter, not
+     persisted across restarts), matching "how long have I been reading
+     right now" rather than a lifetime total.
+  --------------------------------------------------------------------- */
+
+  const SESSION_LIMIT_KEY = 'novelReader_sessionLimitMinutes';
+  const sessionTimerEl = document.getElementById('session-timer');
+  const sessionLimitInput = document.getElementById('session-limit-input');
+  const sessionLimitValueEl = document.getElementById('session-limit-value');
+  const sessionLimitOverlay = document.getElementById('session-limit-overlay');
+  const sessionLimitDismissBtn = document.getElementById('session-limit-dismiss-btn');
+
+  let sessionElapsedMs = 0;
+  let sessionLastTickAt = Date.now();
+  let sessionLimitReachedAndDismissed = false;
+  let sessionTickInterval = null;
+
+  function formatSessionTime(ms) {
+    const totalMinutes = Math.floor(ms / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  }
+
+  function updateSessionTimerDisplay() {
+    sessionTimerEl.textContent = formatSessionTime(sessionElapsedMs);
+  }
+
+  function getSessionLimitMinutes() {
+    const raw = localStorage.getItem(SESSION_LIMIT_KEY);
+    const value = raw !== null ? parseInt(raw, 10) : 0;
+    return isNaN(value) ? 0 : value;
+  }
+
+  function saveSessionLimitMinutes(minutes) {
+    localStorage.setItem(SESSION_LIMIT_KEY, String(minutes));
+  }
+
+  function updateSessionLimitLabel(minutes) {
+    sessionLimitValueEl.textContent = minutes === 0 ? 'Off' : `${minutes} min`;
+  }
+
+  function sessionTick() {
+    if (document.visibilityState !== 'visible') return;
+    const now = Date.now();
+    sessionElapsedMs += now - sessionLastTickAt;
+    sessionLastTickAt = now;
+    updateSessionTimerDisplay();
+
+    const limitMinutes = getSessionLimitMinutes();
+    if (limitMinutes > 0 && !sessionLimitReachedAndDismissed && sessionElapsedMs >= limitMinutes * 60000) {
+      sessionLimitOverlay.classList.remove('hidden');
+    }
+  }
+
+  // Reset the "last tick" anchor whenever the app returns to the
+  // foreground, so backgrounded time is never counted as active reading.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      sessionLastTickAt = Date.now();
+    }
+  });
+
+  sessionTickInterval = setInterval(sessionTick, 1000);
+  updateSessionTimerDisplay();
+
+  sessionLimitInput.value = getSessionLimitMinutes();
+  updateSessionLimitLabel(getSessionLimitMinutes());
+
+  sessionLimitInput.addEventListener('input', () => {
+    const minutes = parseInt(sessionLimitInput.value, 10);
+    saveSessionLimitMinutes(minutes);
+    updateSessionLimitLabel(minutes);
+    // Raising or turning off the limit after it was already hit this
+    // session should let the overlay go away/not reappear immediately.
+    if (minutes === 0 || sessionElapsedMs < minutes * 60000) {
+      sessionLimitReachedAndDismissed = false;
+    }
+  });
+
+  sessionLimitDismissBtn.addEventListener('click', () => {
+    sessionLimitOverlay.classList.add('hidden');
+    sessionLimitReachedAndDismissed = true;
+  });
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight') openChapter(currentIndex + 1);
     if (e.key === 'ArrowLeft') openChapter(currentIndex - 1);
