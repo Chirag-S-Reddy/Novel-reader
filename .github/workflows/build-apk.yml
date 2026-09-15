@@ -20,13 +20,17 @@ jobs:
           java-version: '17'
 
       # ubuntu-latest runners already ship a full Android SDK
-      # (cmdline-tools, platforms, build-tools) — no separate setup
-      # action needed. We just make sure the required platform and
-      # build-tools versions this project targets are installed.
+      # (cmdline-tools, platforms, build-tools), but the cmdline-tools
+      # bin directory isn't on PATH by default — add it explicitly.
       - name: Ensure required Android SDK packages are installed
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -f "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name sdkmanager | head -1)
+          fi
+          echo "Using sdkmanager at: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
